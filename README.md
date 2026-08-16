@@ -84,7 +84,11 @@ File format:
 ```
 
 Tool tags match the tool name, with prefix rules mapping `mcp__memory_*` to `memory`,
-`mcp__*` to `mcp`, and so on. Each set can define its own spinner frames.
+`mcp__*` to `mcp`, and so on.
+
+Each set can define its own spinner frames. In `all` mode the messages are drawn from every
+set, but the animation is not: one themed set is picked at random per launch and its frames
+stay for the whole session, because frames changing on every tool call read as a glitch.
 
 `/vibes [all|<set>|off]`, `ctrl+alt+v` to cycle. The choice persists in
 `~/.pi/agent/vibes-state.json`.

@@ -140,6 +140,11 @@ export default function (pi: ExtensionAPI) {
 	const saved = readState();
 	let activeSet = saved && (saved === ALL || saved === OFF || sets.has(saved)) ? saved : ALL;
 
+	// В режиме all тексты мешаются из всех наборов, но спиннер так не умеет:
+	// кадры, меняющиеся на каждый инструмент, читаются как глитч. Поэтому
+	// анимация выбирается случайно один раз за запуск и дальше не меняется.
+	const sessionAllSet = pick(names.filter((name) => INDICATORS[name] !== undefined));
+
 	const cycle = [ALL, ...names, OFF];
 	pi.registerFlag("vibes", {
 		description: `Набор вайбов на старте: ${cycle.join(" | ")}`,
@@ -181,9 +186,10 @@ export default function (pi: ExtensionAPI) {
 
 	function applyIndicator(ctx: ExtensionContext): void {
 		if (!ctx.hasUI) return;
-		// Своя анимация есть только у конкретного набора: в режиме all и off
-		// оставляем дефолтный спиннер pi.
-		ctx.ui.setWorkingIndicator(INDICATORS[activeSet]);
+		// off и наборы без своих кадров отдают undefined — это штатный способ
+		// вернуть дефолтный спиннер pi.
+		const source = activeSet === ALL ? sessionAllSet : activeSet;
+		ctx.ui.setWorkingIndicator(source ? INDICATORS[source] : undefined);
 	}
 
 	pi.on("session_start", async (_event, ctx) => {

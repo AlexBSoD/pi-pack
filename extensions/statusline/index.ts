@@ -94,11 +94,16 @@ export default function (pi: ExtensionAPI) {
 		install(ctx);
 	});
 
-	for (const event of ["after_provider_response", "agent_end", "model_select", "thinking_level_select"] as const) {
-		pi.on(event, async () => {
-			requestRender?.();
-		});
-	}
+	// Перерисовка по событиям, меняющим содержимое футера. Развёрнуто в отдельные
+	// вызовы, а не цикл по массиву: pi.on перегружена по литералу события, и union
+	// из цикла не подходит ни под одну перегрузку.
+	const rerender = async () => {
+		requestRender?.();
+	};
+	pi.on("after_provider_response", rerender);
+	pi.on("agent_end", rerender);
+	pi.on("model_select", rerender);
+	pi.on("thinking_level_select", rerender);
 
 	pi.on("session_shutdown", async () => {
 		requestRender = undefined;
