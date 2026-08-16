@@ -1,0 +1,25 @@
+{
+	"name": "pi-pack",
+	"version": "0.1.0",
+	"description": "pi extensions: guardrails on dangerous tool calls, a custom statusline footer, and themed working messages",
+	"license": "MIT",
+	"author": "AlexBSoD",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/AlexBSoD/pi-pack.git"
+	},
+	"keywords": [
+		"pi-package",
+		"pi",
+		"coding-agent"
+	],
+	"pi": {
+		"extensions": [
+			"./extensions/*/index.ts"
+		]
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"@earendil-works/pi-tui": "*"
+	}
+}
