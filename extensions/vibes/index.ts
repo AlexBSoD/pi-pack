@@ -13,6 +13,9 @@
  *                                                 на старте запроса
  *   # комментарий                                — игнорируется
  *
+ * У набора могут быть свои кадры спиннера; в режиме all анимация идёт за
+ * показанной строкой — какому набору строка, того и кадры.
+ *
  * Команды:
  *   /vibes            — показать активный набор
  *   /vibes <набор>    — переключиться (all | off | имя файла)
@@ -31,6 +34,12 @@ type VibeSet = {
 	general: string[];
 	/** тег инструмента -> строки */
 	byTool: Map<string, string[]>;
+};
+
+/** Строка вместе с набором, из которого она пришла — по нему выбирается спиннер. */
+type Vibe = {
+	text: string;
+	set: string;
 };
 
 const AGENT_DIR = process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
@@ -110,9 +119,9 @@ function loadDir(dir: string, into: Map<string, VibeSet>): void {
 	}
 }
 
-function pick(lines: string[]): string | undefined {
-	if (lines.length === 0) return undefined;
-	return lines[Math.floor(Math.random() * lines.length)];
+function pick<T>(items: T[]): T | undefined {
+	if (items.length === 0) return undefined;
+	return items[Math.floor(Math.random() * items.length)];
 }
 
 function readState(): string | undefined {
@@ -143,9 +152,9 @@ export default function (pi: ExtensionAPI) {
 	const saved = readState();
 	let activeSet = saved && (saved === ALL || saved === OFF || sets.has(saved)) ? saved : ALL;
 
-	// В режиме all тексты мешаются из всех наборов, но спиннер так не умеет:
-	// кадры, меняющиеся на каждый инструмент, читаются как глитч. Поэтому
-	// анимация выбирается случайно один раз за запуск и дальше не меняется.
+	// В режиме all анимация идёт за текстом: показали строку из fallout —
+	// крутится счётчик Гейгера. До первой строки показывать нечего, поэтому
+	// стартовый набор выбирается случайно один раз за запуск.
 	const sessionAllSet = pick(names.filter((name) => INDICATORS[name] !== undefined));
 
 	const cycle = [ALL, ...names, OFF];
@@ -158,18 +167,18 @@ export default function (pi: ExtensionAPI) {
 		return name === ALL || name === OFF || sets.has(name);
 	}
 
-	function activeSets(): VibeSet[] {
+	function activeSets(): Array<[string, VibeSet]> {
 		if (activeSet === OFF) return [];
-		if (activeSet === ALL) return [...sets.values()];
+		if (activeSet === ALL) return [...sets.entries()];
 		const one = sets.get(activeSet);
-		return one ? [one] : [];
+		return one ? [[activeSet, one]] : [];
 	}
 
-	function generalVibe(): string | undefined {
-		return pick(activeSets().flatMap((s) => s.general));
+	function generalVibe(): Vibe | undefined {
+		return pick(activeSets().flatMap(([set, s]) => s.general.map((text) => ({ text, set }))));
 	}
 
-	function toolVibe(toolName: string): string | undefined {
+	function toolVibe(toolName: string): Vibe | undefined {
 		const active = activeSets();
 		if (active.length === 0) return undefined;
 
@@ -180,19 +189,36 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		for (const tag of tags) {
-			const lines = active.flatMap((s) => s.byTool.get(tag) ?? []);
+			const lines = active.flatMap(([set, s]) => (s.byTool.get(tag) ?? []).map((text) => ({ text, set })));
 			const hit = pick(lines);
 			if (hit) return hit;
 		}
 		return undefined;
 	}
 
-	function applyIndicator(ctx: ExtensionContext): void {
+	// Какой набор сейчас на спиннере — чтобы не дёргать UI одними и теми же кадрами.
+	let indicatorSet: string | undefined;
+
+	function applyIndicator(ctx: ExtensionContext, source: string | undefined): void {
 		if (!ctx.hasUI) return;
+		if (indicatorSet === source) return;
+		indicatorSet = source;
 		// off и наборы без своих кадров отдают undefined — это штатный способ
 		// вернуть дефолтный спиннер pi.
-		const source = activeSet === ALL ? sessionAllSet : activeSet;
 		ctx.ui.setWorkingIndicator(source ? INDICATORS[source] : undefined);
+	}
+
+	/** Спиннер выбранного вручную набора; в all — стартовый, до первой строки. */
+	function resetIndicator(ctx: ExtensionContext): void {
+		if (activeSet === OFF) applyIndicator(ctx, undefined);
+		else applyIndicator(ctx, activeSet === ALL ? sessionAllSet : activeSet);
+	}
+
+	/** Строка и её анимация ставятся вместе — иначе в all они разъезжаются. */
+	function showVibe(ctx: ExtensionContext, vibe: Vibe | undefined): void {
+		if (!vibe) return;
+		ctx.ui.setWorkingMessage(vibe.text);
+		applyIndicator(ctx, vibe.set);
 	}
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -200,7 +226,7 @@ export default function (pi: ExtensionAPI) {
 		if (typeof fromFlag === "string" && isKnown(fromFlag.toLowerCase())) {
 			activeSet = fromFlag.toLowerCase(); // флаг важнее сохранённого выбора, но его не перезаписывает
 		}
-		applyIndicator(ctx);
+		resetIndicator(ctx);
 	});
 
 	pi.registerShortcut("ctrl+alt+v", {
@@ -208,21 +234,19 @@ export default function (pi: ExtensionAPI) {
 		handler: async (ctx) => {
 			activeSet = cycle[(cycle.indexOf(activeSet) + 1) % cycle.length] ?? ALL;
 			writeState(activeSet);
-			applyIndicator(ctx);
+			resetIndicator(ctx);
 			if (activeSet === OFF) ctx.ui.setWorkingMessage();
 			ctx.ui.notify(`Vibes: ${activeSet}`, "info");
 		},
 	});
 
 	pi.on("before_agent_start", async (_event, ctx) => {
-		const vibe = generalVibe();
-		if (vibe) ctx.ui.setWorkingMessage(vibe);
+		showVibe(ctx, generalVibe());
 	});
 
 	// Сообщение меняется на каждый инструмент — видно, чем харнесс занят сейчас.
 	pi.on("tool_execution_start", async (event, ctx) => {
-		const vibe = toolVibe(event.toolName) ?? generalVibe();
-		if (vibe) ctx.ui.setWorkingMessage(vibe);
+		showVibe(ctx, toolVibe(event.toolName) ?? generalVibe());
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {
@@ -259,7 +283,7 @@ export default function (pi: ExtensionAPI) {
 
 			activeSet = arg;
 			writeState(activeSet);
-			applyIndicator(ctx);
+			resetIndicator(ctx);
 			if (activeSet === OFF) ctx.ui.setWorkingMessage();
 			ctx.ui.notify(`Vibes: ${activeSet}`, "info");
 		},
