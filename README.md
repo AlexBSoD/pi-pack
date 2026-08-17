@@ -72,8 +72,8 @@ Themed working messages in the spinner, replacing pi's default.
 
 Sets are `*.txt` files loaded from the extension directory and from
 `$PI_CODING_AGENT_DIR/vibes` (default `~/.pi/agent/vibes`); a user file overrides a built-in
-one of the same name. Two sets ship with the package: `cyber` and `fallout`, ~220 lines
-each, in Russian.
+one of the same name. Five sets ship with the package — `cyber`, `fallout`, `mechanicus`,
+`eldritch` and `noir` — 170–220 lines each, in Russian.
 
 File format:
 

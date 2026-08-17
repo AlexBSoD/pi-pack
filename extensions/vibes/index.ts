@@ -59,6 +59,9 @@ const TOOL_PREFIX_TAGS: Array<[RegExp, string]> = [
 const INDICATORS: Record<string, WorkingIndicatorOptions> = {
 	cyber: { frames: ["░", "▒", "▓", "█", "▓", "▒"], intervalMs: 110 },
 	fallout: { frames: ["·", "∙", "•", "☢", "•", "∙"], intervalMs: 140 },
+	mechanicus: { frames: ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"], intervalMs: 90 },
+	eldritch: { frames: ["·", "∘", "○", "◉", "○", "∘"], intervalMs: 170 },
+	noir: { frames: ["▖", "▘", "▝", "▗"], intervalMs: 190 },
 };
 
 function parseVibeFile(content: string): VibeSet {
