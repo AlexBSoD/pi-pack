@@ -4,7 +4,7 @@
  * Правила висят на tool_call, поэтому работают независимо от того, прочитала
  * ли модель CONTEXT.md и в каком она настроении:
  *   - деструктивные bash-команды (rm, git reset --hard, podman rm, SQL DELETE
- *     без WHERE, перезапись файла редиректом) → диалог подтверждения;
+ *     без WHERE) → диалог подтверждения;
  *   - запись в защищённые пути (agenix, *.age, ~/.ssh, disko.nix) → блок;
  *   - find/grep -r → блок с напоминанием про fd/rg;
  *   - fish-синтаксис в bash-инструменте → блок;
@@ -47,11 +47,6 @@ const CONFIRM_BASH: Array<[RegExp, string, string]> = [
 	[/\bDELETE\s+FROM\b(?![\s\S]*\bWHERE\b)/i, "sql-delete-all", "DELETE без WHERE чистит таблицу целиком"],
 	[/\bmkfs\b|\bdd\s[^;&|]*\bof=\/dev\//, "raw-device-write", "запись напрямую на устройство"],
 	[/\bnix-collect-garbage\b|\bnix\s+store\s+gc\b/, "nix-gc", "сборка мусора удаляет старые поколения"],
-	[
-		/(?<![>&\d])>(?!>)\s*(?!\/dev\/null|\/tmp\/|&)[^\s;&|]+/,
-		"redirect-overwrite",
-		"редирект > перезаписывает файл целиком",
-	],
 ];
 
 /** Блокируем наглухо: обратного пути нет либо чинится только руками. */
