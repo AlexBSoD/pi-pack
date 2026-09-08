@@ -17,6 +17,7 @@ const I_DIR = "\u{f07b}"; //  fa-folder-open
 const I_GIT = "\u{e0a0}"; //  pl-branch
 const I_CTX = "\u{f0eb}"; //  fa-lightbulb-o
 const I_TIME = "\u{f017}"; //  fa-clock-o
+const I_WAIT = "\u{f252}"; //  fa-hourglass-half
 const SEP = "\u{e0b1}"; //  thin separator
 
 /** Часы тикают сами по себе, всё остальное перерисовывается по событиям. */
@@ -44,6 +45,8 @@ function formatContext(usage: ReturnType<ExtensionContext["getContextUsage"]>): 
 
 export default function (pi: ExtensionAPI) {
 	let requestRender: (() => void) | undefined;
+	/** Открыт блокирующий диалог расширения — pi ждёт человека, а не модель. */
+	let waitingForInput = false;
 
 	function install(ctx: ExtensionContext): void {
 		if (!ctx.hasUI) return;
@@ -81,6 +84,7 @@ export default function (pi: ExtensionAPI) {
 						const color = percent > 80 ? "error" : percent > 50 ? "warning" : "muted";
 						segments.push(theme.fg(color, `${I_CTX} ${ctxStr}`));
 					}
+					if (waitingForInput) segments.push(theme.fg("warning", `${I_WAIT} ждёт ввода`));
 					segments.push(theme.fg("dim", `${I_TIME} ${clock()}`));
 
 					const sep = theme.fg("dim", ` ${SEP} `);
@@ -105,7 +109,21 @@ export default function (pi: ExtensionAPI) {
 	pi.on("model_select", rerender);
 	pi.on("thinking_level_select", rerender);
 
+	// ui_prompt_* фаятся вокруг ctx.ui.select/confirm/input/editor/custom —
+	// это единственный способ отличить «модель думает» от «диалог ждёт ответа».
+	// Вложенные диалоги pi схлопывает в один интервал.
+	pi.on("ui_prompt_start", async () => {
+		waitingForInput = true;
+		requestRender?.();
+	});
+
+	pi.on("ui_prompt_end", async () => {
+		waitingForInput = false;
+		requestRender?.();
+	});
+
 	pi.on("session_shutdown", async () => {
+		waitingForInput = false;
 		requestRender = undefined;
 	});
 }

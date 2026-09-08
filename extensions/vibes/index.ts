@@ -50,6 +50,11 @@ const STATE_FILE = join(AGENT_DIR, "vibes-state.json");
 const OFF = "off";
 const ALL = "all";
 
+/** Ключ спиннера на время диалога: с именем набора не столкнётся. */
+const WAIT_KEY = "\u0000wait";
+/** Пустой список кадров прячет индикатор — pi ничего не делает, нечего крутить. */
+const FROZEN: WorkingIndicatorOptions = { frames: [] };
+
 /**
  * Инструмент -> тег в файле вайбов. Точное имя ищется первым, потом
  * префиксные правила (mcp-инструменты приходят как mcp__<сервер>__<tool>).
@@ -157,6 +162,9 @@ export default function (pi: ExtensionAPI) {
 	// стартовый набор выбирается случайно один раз за запуск.
 	const sessionAllSet = pick(names.filter((name) => INDICATORS[name] !== undefined));
 
+	/** Открыт диалог pi — сообщение и спиннер заморожены до ui_prompt_end. */
+	let waiting = false;
+
 	const cycle = [ALL, ...names, OFF];
 	pi.registerFlag("vibes", {
 		description: `Набор вайбов на старте: ${cycle.join(" | ")}`,
@@ -196,16 +204,25 @@ export default function (pi: ExtensionAPI) {
 		return undefined;
 	}
 
-	// Какой набор сейчас на спиннере — чтобы не дёргать UI одними и теми же кадрами.
-	let indicatorSet: string | undefined;
+	// Что сейчас на спиннере — чтобы не дёргать UI одними и теми же кадрами.
+	// Ключ: имя набора, WAIT_KEY на время диалога или undefined для дефолта.
+	let indicatorKey: string | undefined;
+
+	function setIndicator(
+		ctx: ExtensionContext,
+		key: string | undefined,
+		frames: WorkingIndicatorOptions | undefined,
+	): void {
+		if (!ctx.hasUI) return;
+		if (indicatorKey === key) return;
+		indicatorKey = key;
+		ctx.ui.setWorkingIndicator(frames);
+	}
 
 	function applyIndicator(ctx: ExtensionContext, source: string | undefined): void {
-		if (!ctx.hasUI) return;
-		if (indicatorSet === source) return;
-		indicatorSet = source;
 		// off и наборы без своих кадров отдают undefined — это штатный способ
 		// вернуть дефолтный спиннер pi.
-		ctx.ui.setWorkingIndicator(source ? INDICATORS[source] : undefined);
+		setIndicator(ctx, source, source ? INDICATORS[source] : undefined);
 	}
 
 	/** Спиннер выбранного вручную набора; в all — стартовый, до первой строки. */
@@ -214,9 +231,14 @@ export default function (pi: ExtensionAPI) {
 		else applyIndicator(ctx, activeSet === ALL ? sessionAllSet : activeSet);
 	}
 
+	/** Последняя показанная строка — её возвращаем после диалога. */
+	let lastVibe: Vibe | undefined;
+
 	/** Строка и её анимация ставятся вместе — иначе в all они разъезжаются. */
 	function showVibe(ctx: ExtensionContext, vibe: Vibe | undefined): void {
 		if (!vibe) return;
+		lastVibe = vibe;
+		if (waiting) return; // диалог важнее, строку вернём на ui_prompt_end
 		ctx.ui.setWorkingMessage(vibe.text);
 		applyIndicator(ctx, vibe.set);
 	}
@@ -250,7 +272,33 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {
+		lastVibe = undefined;
+		if (waiting) return;
 		ctx.ui.setWorkingMessage();
+	});
+
+	// Пока открыт диалог (ctx.ui.select и родня — например подтверждение
+	// guardrails), pi не работает, а ждёт человека. Крутить в это время спиннер
+	// и писать «взламываю Пентагон» — враньё: показываем строку с тегом ask и
+	// гасим анимацию. Вложенные диалоги pi схлопывает в один интервал, но флаг
+	// всё равно проверяем: обработчики зовутся best-effort и не ожидаются.
+	pi.on("ui_prompt_start", async (_event, ctx) => {
+		if (!ctx.hasUI || waiting) return;
+		waiting = true;
+		ctx.ui.setWorkingMessage(toolVibe("ask")?.text ?? "Жду ответа...");
+		setIndicator(ctx, WAIT_KEY, FROZEN);
+	});
+
+	pi.on("ui_prompt_end", async (_event, ctx) => {
+		if (!ctx.hasUI || !waiting) return;
+		waiting = false;
+		if (lastVibe) {
+			ctx.ui.setWorkingMessage(lastVibe.text);
+			applyIndicator(ctx, lastVibe.set);
+		} else {
+			ctx.ui.setWorkingMessage();
+			resetIndicator(ctx);
+		}
 	});
 
 	pi.registerCommand("vibes", {
