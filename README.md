@@ -43,7 +43,6 @@ Confirmation dialog:
 - `podman`/`docker` `rm`, `rmi`, `prune`, `volume rm`
 - `DROP`/`TRUNCATE`, `DELETE FROM` without a `WHERE`
 - `mkfs`, `dd of=/dev/…`, `nix-collect-garbage`
-- `>` redirects that overwrite an existing file
 
 Answering "don't ask again" marks that one rule allowed for the rest of the session.
 
@@ -63,6 +62,10 @@ that would prompt is blocked instead.
 Replaces the pi footer with a single line: host, cwd, git branch, model, thinking level,
 context usage, clock. Built on `ctx.ui.setFooter()`, so the git branch comes from
 `footerData` rather than shelling out from the UI thread.
+
+While a blocking extension dialog is open — a guardrails confirmation, say — the line
+carries a "waiting for input" marker, so a stalled session does not look like a working one.
+Driven by the `ui_prompt_start` / `ui_prompt_end` events (pi 0.84.4+).
 
 Requires a Nerd Font — the icons come from the private use area.
 
@@ -90,6 +93,10 @@ Each set can define its own spinner frames. In `all` mode the animation follows 
 a line from `fallout` also brings the Geiger-counter frames. Until the first message the
 frames come from a set picked at random per launch. A set with no frames of its own falls
 back to pi's default spinner.
+
+While a blocking dialog is open pi is waiting on a human, not working, so the animation
+stops and the line switches to one tagged `ask`; the previous message comes back when the
+dialog closes. Driven by the `ui_prompt_start` / `ui_prompt_end` events (pi 0.84.4+).
 
 `/vibes [all|<set>|off]`, `ctrl+alt+v` to cycle. The choice persists in
 `~/.pi/agent/vibes-state.json`.
