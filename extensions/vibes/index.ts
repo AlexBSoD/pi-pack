@@ -17,9 +17,13 @@
  * показанной строкой — какому набору строка, того и кадры.
  *
  * Команды:
- *   /vibes            — показать активный набор
- *   /vibes <набор>    — переключиться (all | off | имя файла)
+ *   /vibes                — показать текущий выбор
+ *   /vibes <набор> [..]   — переключиться (all | off | имена наборов, несколько
+ *                           — через пробел или запятую)
+ *   /vibes +<набор>       — добавить в текущий выбор
+ *   /vibes -<набор>       — убрать из текущего выбора
  *
+ * Флаг --vibes принимает то же самое: --vibes fallout,noir.
  * Выбор переживает перезапуск: пишется в $PI_CODING_AGENT_DIR/vibes-state.json.
  */
 
@@ -129,18 +133,28 @@ function pick<T>(items: T[]): T | undefined {
 	return items[Math.floor(Math.random() * items.length)];
 }
 
-function readState(): string | undefined {
+/** Сохранённый выбор: [] — off, ["all"] — все, иначе список имён наборов. */
+function readState(): string[] | undefined {
 	try {
-		const parsed = JSON.parse(readFileSync(STATE_FILE, "utf-8")) as { activeSet?: unknown };
-		return typeof parsed.activeSet === "string" ? parsed.activeSet : undefined;
+		const parsed = JSON.parse(readFileSync(STATE_FILE, "utf-8")) as {
+			activeSet?: unknown; // старый формат — всё ещё читаем
+			activeSets?: unknown;
+		};
+		const raw = Array.isArray(parsed.activeSets)
+			? parsed.activeSets
+			: typeof parsed.activeSet === "string"
+				? [parsed.activeSet]
+				: undefined;
+		return Array.isArray(raw) ? raw.filter((n): n is string => typeof n === "string") : undefined;
 	} catch {
 		return undefined;
 	}
 }
 
-function writeState(activeSet: string): void {
+function writeState(active: string[]): void {
 	try {
-		writeFileSync(STATE_FILE, `${JSON.stringify({ activeSet }, null, 2)}\n`);
+		// off пишем как ["off"]: пустой список при чтении — «файла не было»
+		writeFileSync(STATE_FILE, `${JSON.stringify({ activeSets: active.length > 0 ? active : [OFF] }, null, 2)}\n`);
 	} catch {
 		// не смогли сохранить — переживём, выбор просто не переживёт рестарт
 	}
@@ -154,8 +168,10 @@ export default function (pi: ExtensionAPI) {
 	const names = [...sets.keys()].sort();
 	const options = [ALL, ...names, OFF].join(" | ");
 
-	const saved = readState();
-	let activeSet = saved && (saved === ALL || saved === OFF || sets.has(saved)) ? saved : ALL;
+	// Выбор — список имён наборов: ["all"] — все, [] — off. Неизвестные имена из
+	// сохранённого состояния отбрасываем; пустой остаток значит «файла не было».
+	const saved = (readState() ?? []).filter((name) => name === ALL || name === OFF || sets.has(name));
+	let active: string[] = saved.length > 0 ? (saved.includes(OFF) ? [] : saved) : [ALL];
 
 	// В режиме all анимация идёт за текстом: показали строку из fallout —
 	// крутится счётчик Гейгера. До первой строки показывать нечего, поэтому
@@ -167,7 +183,7 @@ export default function (pi: ExtensionAPI) {
 
 	const cycle = [ALL, ...names, OFF];
 	pi.registerFlag("vibes", {
-		description: `Набор вайбов на старте: ${cycle.join(" | ")}`,
+		description: `Наборы вайбов на старте: ${cycle.join(" | ")}, несколько — через пробел или запятую`,
 		type: "string",
 	});
 
@@ -175,11 +191,32 @@ export default function (pi: ExtensionAPI) {
 		return name === ALL || name === OFF || sets.has(name);
 	}
 
+	/** "all" | "off" | "fallout + noir" — для уведомлений и выводов. */
+	function label(): string {
+		if (active.length === 0) return OFF;
+		if (active.includes(ALL)) return ALL;
+		return active.join(" + ");
+	}
+
+	/** Аргумент флага/команды -> выбор: через пробел или запятую. */
+	function parseList(raw: string): string[] | undefined {
+		const parts = raw.toLowerCase().split(/[\s,]+/).filter((p) => p.length > 0);
+		if (parts.length === 0) return undefined;
+		if (parts.some((p) => !isKnown(p))) return undefined;
+		if (parts.includes(OFF)) return [];
+		if (parts.includes(ALL)) return [ALL];
+		return parts;
+	}
+
 	function activeSets(): Array<[string, VibeSet]> {
-		if (activeSet === OFF) return [];
-		if (activeSet === ALL) return [...sets.entries()];
-		const one = sets.get(activeSet);
-		return one ? [[activeSet, one]] : [];
+		if (active.length === 0) return [];
+		const pool = active.includes(ALL) ? names : active;
+		const out: Array<[string, VibeSet]> = [];
+		for (const name of pool) {
+			const set = sets.get(name);
+			if (set) out.push([name, set]);
+		}
+		return out;
 	}
 
 	function generalVibe(): Vibe | undefined {
@@ -187,8 +224,8 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	function toolVibe(toolName: string): Vibe | undefined {
-		const active = activeSets();
-		if (active.length === 0) return undefined;
+		const pool = activeSets();
+		if (pool.length === 0) return undefined;
 
 		const name = toolName.toLowerCase();
 		const tags = [name];
@@ -197,7 +234,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		for (const tag of tags) {
-			const lines = active.flatMap(([set, s]) => (s.byTool.get(tag) ?? []).map((text) => ({ text, set })));
+			const lines = pool.flatMap(([set, s]) => (s.byTool.get(tag) ?? []).map((text) => ({ text, set })));
 			const hit = pick(lines);
 			if (hit) return hit;
 		}
@@ -225,10 +262,22 @@ export default function (pi: ExtensionAPI) {
 		setIndicator(ctx, source, source ? INDICATORS[source] : undefined);
 	}
 
-	/** Спиннер выбранного вручную набора; в all — стартовый, до первой строки. */
+	/** Случайный набор со своими кадрами в пуле; стабилен на выбор, чтобы кадры
+	 * не менялись при каждом сбросе. */
+	const indicatorPoolPick = new Map<string, string | undefined>();
+	function stableIndicatorPick(pool: string[]): string | undefined {
+		const key = pool.join(",");
+		if (!indicatorPoolPick.has(key)) {
+			indicatorPoolPick.set(key, pick(pool.filter((name) => INDICATORS[name] !== undefined)));
+		}
+		return indicatorPoolPick.get(key);
+	}
+
+	/** Спиннер выбранного набора; в all — стартовый, до первой строки. */
 	function resetIndicator(ctx: ExtensionContext): void {
-		if (activeSet === OFF) applyIndicator(ctx, undefined);
-		else applyIndicator(ctx, activeSet === ALL ? sessionAllSet : activeSet);
+		if (active.length === 0) applyIndicator(ctx, undefined);
+		else if (active.includes(ALL)) applyIndicator(ctx, sessionAllSet);
+		else applyIndicator(ctx, stableIndicatorPick(active));
 	}
 
 	/** Последняя показанная строка — её возвращаем после диалога. */
@@ -245,8 +294,9 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		const fromFlag = pi.getFlag("vibes");
-		if (typeof fromFlag === "string" && isKnown(fromFlag.toLowerCase())) {
-			activeSet = fromFlag.toLowerCase(); // флаг важнее сохранённого выбора, но его не перезаписывает
+		if (typeof fromFlag === "string") {
+			const fromParsed = parseList(fromFlag);
+			if (fromParsed) active = fromParsed; // флаг важнее сохранённого выбора, но его не перезаписывает
 		}
 		resetIndicator(ctx);
 	});
@@ -254,11 +304,21 @@ export default function (pi: ExtensionAPI) {
 	pi.registerShortcut("ctrl+alt+v", {
 		description: "Переключить набор вайбов",
 		handler: async (ctx) => {
-			activeSet = cycle[(cycle.indexOf(activeSet) + 1) % cycle.length] ?? ALL;
-			writeState(activeSet);
+			// Цикл работает как раньше: каждый нажатие заменяет выбор одним шагом;
+			// из многонaborного выбора цикл начинается заново с all.
+			const single = active.length === 1 ? active[0] : undefined;
+			const idx =
+				active.length === 0
+					? cycle.indexOf(OFF)
+					: single && (single === ALL || sets.has(single))
+						? cycle.indexOf(single)
+						: -1;
+			const next = cycle[(idx + 1) % cycle.length] ?? ALL;
+			active = next === OFF ? [] : [next];
+			writeState(active);
 			resetIndicator(ctx);
-			if (activeSet === OFF) ctx.ui.setWorkingMessage();
-			ctx.ui.notify(`Vibes: ${activeSet}`, "info");
+			if (active.length === 0) ctx.ui.setWorkingMessage();
+			ctx.ui.notify(`Vibes: ${label()}`, "info");
 		},
 	});
 
@@ -301,39 +361,73 @@ export default function (pi: ExtensionAPI) {
 		}
 	});
 
+	function applyAndNotify(ctx: ExtensionContext): void {
+		writeState(active);
+		resetIndicator(ctx);
+		if (active.length === 0) ctx.ui.setWorkingMessage();
+		ctx.ui.notify(`Vibes: ${label()}`, "info");
+	}
+
 	pi.registerCommand("vibes", {
-		description: `Набор вайбов в строке загрузки. Usage: /vibes [${options}]`,
+		description: `Наборы вайбов в строке загрузки. Usage: /vibes [${options}], +<набор> — добавить, -<набор> — убрать`,
 		getArgumentCompletions: (prefix: string) => {
+			const raw = prefix.toLowerCase();
+			const sign = raw.startsWith("+") || raw.startsWith("-") ? raw[0]! : "";
+			const stem = raw.slice(sign.length);
 			const items = [ALL, ...names, OFF]
-				.filter((name) => name.startsWith(prefix.toLowerCase()))
+				.filter((name) => name.startsWith(stem))
 				.map((name) => ({
-					value: name,
-					label: name,
+					value: sign + name,
+					label: sign + name,
 					description:
-						name === ALL
-							? "все наборы"
-							: name === OFF
-								? "выключить"
-								: `${sets.get(name)?.general.length ?? 0} строк + ${sets.get(name)?.byTool.size ?? 0} тегов`,
+						sign === "+"
+							? "добавить в текущий выбор"
+							: sign === "-"
+								? "убрать из текущего выбора"
+								: name === ALL
+									? "все наборы"
+									: name === OFF
+										? "выключить"
+										: `${sets.get(name)?.general.length ?? 0} строк + ${sets.get(name)?.byTool.size ?? 0} тегов`,
 				}));
 			return items.length > 0 ? items : null;
 		},
 		handler: async (args, ctx) => {
-			const arg = args?.trim().toLowerCase();
-			if (!arg) {
-				ctx.ui.notify(`Vibes: ${activeSet}. Доступно: ${options}`, "info");
+			const raw = (args ?? "").trim();
+			if (!raw) {
+				ctx.ui.notify(`Vibes: ${label()}. Доступно: ${options}`, "info");
 				return;
 			}
-			if (arg !== ALL && arg !== OFF && !sets.has(arg)) {
-				ctx.ui.notify(`Неизвестный набор "${arg}". Доступно: ${options}`, "error");
+			const parts = raw.toLowerCase().split(/[\s,]+/).filter((p) => p.length > 0);
+
+			// +x / -x — править текущий выбор, а не заменять его
+			if (parts.every((p) => p[0] === "+" || p[0] === "-")) {
+				let next: Set<string> = active.includes(ALL) ? new Set(names) : new Set(active);
+				for (const p of parts) {
+					const name = p.slice(1);
+					if (!isKnown(name)) {
+						ctx.ui.notify(`Неизвестный набор "${name}". Доступно: ${options}`, "error");
+						return;
+					}
+					if (p[0] === "+") {
+						if (name === ALL) next = new Set(names);
+						else if (name !== OFF) next.add(name);
+					} else if (name === ALL || name === OFF) next = new Set();
+					else next.delete(name);
+				}
+				// Полный выбор сворачиваем в all — иначе новые наборы будут мимо
+				active = next.size === names.length ? [ALL] : [...next];
+				applyAndNotify(ctx);
 				return;
 			}
 
-			activeSet = arg;
-			writeState(activeSet);
-			resetIndicator(ctx);
-			if (activeSet === OFF) ctx.ui.setWorkingMessage();
-			ctx.ui.notify(`Vibes: ${activeSet}`, "info");
+			const parsed = parseList(raw);
+			if (!parsed) {
+				ctx.ui.notify(`Неизвестный набор в "${raw}". Доступно: ${options}`, "error");
+				return;
+			}
+			active = parsed;
+			applyAndNotify(ctx);
 		},
 	});
 }
