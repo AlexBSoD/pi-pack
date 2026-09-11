@@ -1,6 +1,6 @@
 # pi-pack
 
-Three extensions for the [pi coding agent](https://pi.dev).
+Four extensions for the [pi coding agent](https://pi.dev).
 
 > **Note:** all user-facing strings (command descriptions, dialogs, notifications) are in
 > Russian. The code and this README are in English.
@@ -17,8 +17,8 @@ To try without installing:
 pi -e git:github.com/AlexBSoD/pi-pack
 ```
 
-No runtime dependencies — the extensions only use node builtins plus
-`@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui`, both of which pi bundles.
+No runtime dependencies — the extensions only use node builtins plus the packages pi
+bundles: `@earendil-works/pi-coding-agent`, `pi-tui`, `pi-ai`, `pi-agent-core` and `typebox`.
 
 ## Extensions
 
@@ -100,6 +100,31 @@ dialog closes. Driven by the `ui_prompt_start` / `ui_prompt_end` events (pi 0.84
 
 `/vibes [all|<set>|off]`, `ctrl+alt+v` to cycle. The choice persists in
 `~/.pi/agent/vibes-state.json`.
+
+### obspack
+
+Stops large tool results from being replayed on every request. A text result over 10 KiB is
+sent in full only for the first two provider requests — while the model is still reacting to
+it. From the third request on, the context carries a short placeholder instead: id, size,
+the first and last lines. The original is archived on disk and the model pulls back exactly
+what it needs with the `obs_recall` tool — a page of lines (`{"id","line","lines"}`) or a
+case-insensitive regex search (`{"id","grep"}`) that returns matching lines with numbers.
+
+Derived from ObservationPack in [NVlabs/SoL-Pi](https://github.com/NVlabs/SoL-Pi) (MIT).
+Differences: line-based paging and grep instead of byte offsets, no ledger, automatic
+cleanup of archives whose session file is gone, a tmpdir fallback for non-persistent
+sessions.
+
+The session file is never modified — the swap happens in the `context` projection, so
+history stays complete and recall keeps working after a resume or native compaction. The
+send counter is derived from the history itself (assistant messages after the result), not
+kept in memory, so the same request always projects the same way and prompt caching is not
+disturbed. Any error fails open: the result goes out as it was.
+
+Archives live in `<session dir>/obspack/<session id>/` and are removed on startup once the
+matching session `.jsonl` no longer exists.
+
+`/obspack [on|off|status]` — turn off, or see how much was archived and saved.
 
 ## License
 
