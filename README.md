@@ -1,6 +1,6 @@
 # pi-pack
 
-Four extensions for the [pi coding agent](https://pi.dev).
+Five extensions for the [pi coding agent](https://pi.dev).
 
 > **Note:** all user-facing strings (command descriptions, dialogs, notifications) are in
 > Russian. The code and this README are in English.
@@ -125,6 +125,21 @@ Archives live in `<session dir>/obspack/<session id>/` and are removed on startu
 matching session `.jsonl` no longer exists.
 
 `/obspack [on|off|status]` — turn off, or see how much was archived and saved.
+
+### copy-plain
+
+Copies the last assistant reply to the clipboard as plain text.
+
+The built-in `ctrl+x` (`app.message.copy`) copies raw Markdown. `ctrl+shift+x` copies the
+same reply stripped: code fences removed (the code itself is kept, fence-aware so `#`, `>`
+and `---` inside code blocks survive), links become `text (url)`, emphasis, headings,
+table separator rows and horizontal rules go away. Pasting into a chat, ticket or doc
+stays clean.
+
+`/copy-plain` does the same thing as a command.
+
+The copy path mirrors pi's own `copyToClipboard`: `wl-copy` on Wayland, `xclip`/`xsel`
+on X11, OSC 52 as the fallback for SSH sessions without a local display.
 
 ## License
 
