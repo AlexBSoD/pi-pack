@@ -64,7 +64,7 @@ const FROZEN: WorkingIndicatorOptions = { frames: [] };
  * префиксные правила (mcp-инструменты приходят как mcp__<сервер>__<tool>).
  */
 const TOOL_PREFIX_TAGS: Array<[RegExp, string]> = [
-	// pi называет MCP-инструменты как mcp__<сервер>_<tool>
+	// встроенный MCP Pi называет инструменты mcp__<сервер>__<tool>
 	[/^mcp__memory[_-]/, "memory"],
 	[/^mcp__(?:ripdown|search)[_-]|^fetch$|^web/, "web"],
 	[/^mcp__/, "mcp"],

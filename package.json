@@ -1,7 +1,7 @@
 {
 	"name": "pi-pack",
 	"version": "0.1.0",
-	"description": "pi extensions: guardrails on dangerous tool calls, a custom statusline footer, themed working messages, and archiving of large tool results",
+	"description": "pi extensions: guardrails on graphiti memory calls, a custom statusline footer, themed working messages, and archiving of large tool results",
 	"license": "MIT",
 	"author": "AlexBSoD",
 	"repository": {

@@ -24,36 +24,22 @@ bundles: `@earendil-works/pi-coding-agent`, `pi-tui`, `pi-ai`, `pi-agent-core` a
 
 ### guardrails
 
-Rules that hang off `tool_call`, so they apply whether or not the model read them in the
-system prompt.
+Rules for the [graphiti](https://github.com/getzep/graphiti) MCP server, served as `memory`
+through Pi's built-in MCP (tools named `mcp__memory__<tool>`). They hang off `tool_call`, so
+they apply whether or not the model read them in the system prompt — calls from `codemode`
+scripts included.
 
 Blocked outright:
 
-- writes to protected paths — `/run/agenix`, `*.age`, `~/.ssh`, `disko.nix`, `/nix/store`,
-  `.git` internals
-- `find` and `grep -r` — use `fd` and `rg` instead
-- fish syntax inside the `bash` tool (`; and`, `set -gx VAR value`, `string match`), which
-  runs under bash and would just fail
-- `rm -rf /`, `nix-store --delete`
+- `episode_body` over 900 characters — graphiti drops it silently
+- `add_triplet` facts over 200 characters — one edge is one embedding, a paragraph pollutes
+  unrelated searches
+- `clear_graph`
+- Cyrillic search queries — the graph is stored in English
 
-Confirmation dialog:
-
-- `rm`, `rmdir`, `shred`, `truncate`, and `rm` arriving via `xargs` / `-exec` / `fd -x`
-- `git reset --hard`, force push, `git clean -f`, forced rebase
-- `podman`/`docker` `rm`, `rmi`, `prune`, `volume rm`
-- `DROP`/`TRUNCATE`, `DELETE FROM` without a `WHERE`
-- `mkfs`, `dd of=/dev/…`, `nix-collect-garbage`
-
-Answering "don't ask again" marks that one rule allowed for the rest of the session.
-
-There is also a set of rules for the [graphiti](https://github.com/getzep/graphiti) MCP
-server, which are worth keeping only if you run one: `episode_body` over 900 characters and
-`add_triplet` facts over 200 characters are rejected (the former is silently dropped by
-graphiti, the latter pollutes unrelated searches), `clear_graph` is blocked, and Cyrillic
-search queries are rejected because the graph is stored in English.
-
-Without an interactive UI (RPC, `--print`, cron) there is nobody to confirm, so anything
-that would prompt is blocked instead.
+Confirmation dialog: `delete_episode`, `delete_entity_edge`. Answering "don't ask again"
+marks that rule allowed for the rest of the session. Without an interactive UI (RPC,
+`--print`, cron) there is nobody to confirm, so it is blocked instead.
 
 `/guardrails [on|off|status]` — turn off while debugging.
 
@@ -86,7 +72,7 @@ File format:
 # comment
 ```
 
-Tool tags match the tool name, with prefix rules mapping `mcp__memory_*` to `memory`,
+Tool tags match the tool name, with prefix rules mapping `mcp__memory__*` to `memory`,
 `mcp__*` to `mcp`, and so on.
 
 Each set can define its own spinner frames. In `all` mode the animation follows the message:
