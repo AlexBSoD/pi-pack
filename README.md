@@ -2,8 +2,9 @@
 
 Six extensions for the [pi coding agent](https://pi.dev).
 
-> **Note:** all user-facing strings (command descriptions, dialogs, notifications) are in
-> Russian. The code and this README are in English.
+> **Note:** user-facing strings (command descriptions, dialogs, notifications) are in Russian,
+> except statusline segments and statuses, which are in English. The code and this README
+> are in English.
 
 ## Install
 

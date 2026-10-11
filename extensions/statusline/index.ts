@@ -84,9 +84,9 @@ export default function (pi: ExtensionAPI) {
 						const color = percent > 80 ? "error" : percent > 50 ? "warning" : "muted";
 						segments.push(theme.fg(color, `${I_CTX} ${ctxStr}`));
 					}
-					// ctx.ui.setStatus() других расширений: «инкогнито», «guardrails off».
+					// ctx.ui.setStatus() других расширений: "incognito", "guardrails off".
 					for (const status of footerData.getExtensionStatuses().values()) segments.push(status);
-					if (waitingForInput) segments.push(theme.fg("warning", `${I_WAIT} ждёт ввода`));
+					if (waitingForInput) segments.push(theme.fg("warning", `${I_WAIT} waiting for input`));
 					segments.push(theme.fg("dim", `${I_TIME} ${clock()}`));
 
 					const sep = theme.fg("dim", ` ${SEP} `);

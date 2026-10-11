@@ -178,7 +178,7 @@ export default function (pi: ExtensionAPI) {
 
 	function showStatus(ctx: ExtensionContext): void {
 		if (!ctx.hasUI) return;
-		ctx.ui.setStatus(ENTRY, state.on ? ctx.ui.theme.fg("warning", "\u{f21b} инкогнито") : undefined);
+		ctx.ui.setStatus(ENTRY, state.on ? ctx.ui.theme.fg("warning", "\u{f21b} incognito") : undefined);
 	}
 
 	function setEnv(): void {
