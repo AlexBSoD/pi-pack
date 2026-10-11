@@ -1,6 +1,6 @@
 # pi-pack
 
-Five extensions for the [pi coding agent](https://pi.dev).
+Six extensions for the [pi coding agent](https://pi.dev).
 
 > **Note:** all user-facing strings (command descriptions, dialogs, notifications) are in
 > Russian. The code and this README are in English.
@@ -47,7 +47,8 @@ marks that rule allowed for the rest of the session. Without an interactive UI (
 
 Replaces the pi footer with a single line: host, cwd, git branch, model, thinking level,
 context usage, clock. Built on `ctx.ui.setFooter()`, so the git branch comes from
-`footerData` rather than shelling out from the UI thread.
+`footerData` rather than shelling out from the UI thread. Statuses other extensions set with
+`ctx.ui.setStatus()` — incognito, "guardrails off" — are shown too.
 
 While a blocking extension dialog is open — a guardrails confirmation, say — the line
 carries a "waiting for input" marker, so a stalled session does not look like a working one.
@@ -126,6 +127,45 @@ stays clean.
 
 The copy path mirrors pi's own `copyToClipboard`: `wl-copy` on Wayland, `xclip`/`xsel`
 on X11, OSC 52 as the fallback for SSH sessions without a local display.
+
+### incognito
+
+A conversation that leaves no trace: nothing goes to memory unless you say so, and the
+session is deleted from disk when it ends.
+
+The mode is process-wide, like a private browser window. Turn it on with `--incognito`,
+`PI_INCOGNITO=1` or `/incognito on`; `/new` and `/fork` stay incognito. The environment
+variable is inherited by child pi processes, so subagents run incognito too.
+
+Memory:
+
+- writes to graphiti (any `mcp__memory__*` tool except `search_*` / `get_*`), running
+  `memory-digest` / `memory-import` from bash, and edits under `<agent dir>/memory` need
+  confirmation; without an interactive UI they are blocked. Your answer in that dialog is the
+  explicit go-ahead;
+- the system prompt gets an `<incognito>` section, so the model does not try in the first
+  place.
+
+Disk: on `session_shutdown` (quit, `/new`, `/resume`, `/fork` — not reload, the session
+stays) the extension deletes the `.jsonl`, the subagent child sessions in `<ts>_<id>/` and
+the obspack archive `obspack/<id>/`. Pi does not create the file until the first message,
+so starting and quitting leaves nothing at all.
+
+The session carries an `incognito` custom entry; memory-digest skips marked transcripts.
+If pi dies without a shutdown, a registry in `<agent dir>/incognito/<id>.json` (`{file, pid}`)
+lets the next start remove whatever belonged to a dead pid. An `exit` hook does the same
+on the way out as a backstop.
+
+Opening an ordinary session (`--continue`, `/resume`) while incognito would mean either
+deleting its whole history on exit or quietly saving the rest of the talk, so the mode
+switches off with a warning instead. `/incognito on` in a session that already has messages
+asks first — the whole session, earlier messages included, will be deleted.
+
+`/incognito [on|off|status]`.
+
+Pi's flag parser takes the word after a boolean extension flag as its value, so
+`pi -p --incognito "prompt"` swallows the prompt. Put the prompt first or use
+`PI_INCOGNITO=1`.
 
 ## License
 
