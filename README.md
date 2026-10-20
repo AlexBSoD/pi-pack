@@ -1,6 +1,6 @@
 # pi-pack
 
-Six extensions for the [pi coding agent](https://pi.dev).
+Seven extensions for the [pi coding agent](https://pi.dev).
 
 > **Note:** user-facing strings (command descriptions, dialogs, notifications) are in Russian,
 > except statusline segments and statuses, which are in English. The code and this README
@@ -168,6 +168,39 @@ asks first — the whole session, earlier messages included, will be deleted.
 Pi's flag parser takes the word after a boolean extension flag as its value, so
 `pi -p --incognito "prompt"` swallows the prompt. Put the prompt first or use
 `PI_INCOGNITO=1`.
+
+### litellm-catalog
+
+Takes the model list of the `litellm` provider from the [LiteLLM](https://github.com/BerriAI/litellm)
+proxy itself, so context windows and output limits are not duplicated in `models.json`. On
+startup it calls `<baseUrl>/model/info` with the provider key from `auth.json` (a scoped key
+only sees its own models) and registers one model per `model_name`:
+
+| pi field        | LiteLLM `model_info`                                 |
+|-----------------|------------------------------------------------------|
+| `contextWindow` | `max_input_tokens` (or `context_window`)             |
+| `maxTokens`     | `max_tokens` (or `max_output_tokens`)                |
+| `input`         | `supports_vision: true` → `["text", "image"]`        |
+| `reasoning`     | `supports_reasoning: true`                           |
+
+Several deployments under one `model_name` (a fallback group) collapse to the smallest
+limits and the capabilities all of them share. A model without `max_input_tokens` is
+skipped rather than given a guessed window. Set the capability flags explicitly in the
+LiteLLM config: routes that share one `litellm_params.model` leak `model_info` into each
+other.
+
+`models.json` keeps what LiteLLM cannot know. The extension reads `baseUrl`, `api` and the
+provider `compat` from the `litellm` entry there; per-model settings such as
+`thinkingLevelMap` or `chatTemplateKwargs` go into `modelOverrides`, which pi applies on top
+of extension models. Leave `models` out of that entry.
+
+The catalog is fetched inside the extension factory (4 s timeout), so the models exist when
+pi picks the startup model, and a snapshot is written to `<agentDir>/litellm-catalog.json`.
+When LiteLLM is unreachable or `PI_OFFLINE` is set, the snapshot is used; a snapshot taken
+from a different `baseUrl` is ignored. `refreshModels` fetches again whenever pi refreshes
+models with network access.
+
+`/litellm-catalog` — where the catalog came from and what is in it.
 
 ## License
 

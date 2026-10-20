@@ -1,7 +1,7 @@
 {
 	"name": "pi-pack",
 	"version": "0.1.0",
-	"description": "pi extensions: guardrails on graphiti memory calls, a custom statusline footer, themed working messages, archiving of large tool results, and incognito sessions",
+	"description": "pi extensions: guardrails on graphiti memory calls, a custom statusline footer, themed working messages, archiving of large tool results, incognito sessions, and a model catalog read from LiteLLM",
 	"license": "MIT",
 	"author": "AlexBSoD",
 	"repository": {
