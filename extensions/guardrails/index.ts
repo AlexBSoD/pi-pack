@@ -4,8 +4,8 @@
  *
  * Правила висят на tool_call, поэтому работают независимо от того, прочитала
  * ли модель CONTEXT.md и в каком она настроении:
- *   - episode_body > 900 символов, длинный fact в add_triplet, clear_graph,
- *     кириллица в поисковом запросе → блок;
+ *   - episode_body > 900 символов, custom_extraction_instructions в
+ *     add_memory, длинный fact в add_triplet, clear_graph → блок;
  *   - delete_episode / delete_entity_edge → диалог подтверждения.
  *
  * Инструменты встроенного MCP Pi называются mcp__<сервер>__<tool>, вызовы из
@@ -29,7 +29,6 @@ type Verdict = {
 const MEMORY_PREFIX = "mcp__memory__";
 const MAX_EPISODE_BODY = 900;
 const MAX_TRIPLET_FACT = 200;
-const CYRILLIC = /[а-яё]/i;
 
 function inspectMemory(tool: string, input: Record<string, unknown>): Verdict | undefined {
 	if (tool === "clear_graph") {
@@ -49,6 +48,18 @@ function inspectMemory(tool: string, input: Record<string, unknown>): Verdict | 
 				reason: `episode_body ${body.length} символов при лимите ${MAX_EPISODE_BODY}: длинные эпизоды теряются молча, разбей на несколько`,
 			};
 		}
+		// С 2026-10-20 память пишется по-русски, и graphiti-core 0.31 сам держит
+		// язык эпизода. Инструкции сверху (проверено: «пиши по-русски, в
+		// именительном падеже») уводят локальный Qwen3.5-9B в генерацию до
+		// max_tokens — JSON рвётся, эпизод теряется после ретраев.
+		const instructions = input.custom_extraction_instructions;
+		if (typeof instructions === "string" && instructions.trim() !== "") {
+			return {
+				mode: "block",
+				rule: "extraction-instructions",
+				reason: "custom_extraction_instructions зацикливают локальный extractor и эпизод теряется — убери параметр, язык эпизода graphiti держит сам",
+			};
+		}
 	}
 
 	if (tool === "add_triplet") {
@@ -58,17 +69,6 @@ function inspectMemory(tool: string, input: Record<string, unknown>): Verdict | 
 				mode: "block",
 				rule: "triplet-too-long",
 				reason: `fact ${fact.length} символов: одно ребро — один эмбеддинг, длинный fact засоряет поиск. Пиши эпизод через add_memory`,
-			};
-		}
-	}
-
-	if (tool === "search_nodes" || tool === "search_memory_facts") {
-		const query = typeof input.query === "string" ? input.query : "";
-		if (CYRILLIC.test(query)) {
-			return {
-				mode: "block",
-				rule: "russian-query",
-				reason: "память хранится по-английски, русский запрос вернёт пустоту — переформулируй",
 			};
 		}
 	}

@@ -33,10 +33,11 @@ scripts included.
 Blocked outright:
 
 - `episode_body` over 900 characters — graphiti drops it silently
+- `custom_extraction_instructions` in `add_memory` — with a small local extractor model they
+  cause runaway generation up to `max_tokens`, and the episode is lost after retries
 - `add_triplet` facts over 200 characters — one edge is one embedding, a paragraph pollutes
   unrelated searches
 - `clear_graph`
-- Cyrillic search queries — the graph is stored in English
 
 Confirmation dialog: `delete_episode`, `delete_entity_edge`. Answering "don't ask again"
 marks that rule allowed for the rest of the session. Without an interactive UI (RPC,
