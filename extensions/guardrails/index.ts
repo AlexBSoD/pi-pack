@@ -4,6 +4,7 @@
  *
  * Правила висят на tool_call, поэтому работают независимо от того, прочитала
  * ли модель CONTEXT.md и в каком она настроении:
+ *   - find / grep -r в bash → блок с напоминанием про fd/rg;
  *   - episode_body > 900 символов, custom_extraction_instructions в
  *     add_memory, длинный fact в add_triplet, clear_graph → блок;
  *   - delete_episode / delete_entity_edge → диалог подтверждения.
@@ -29,6 +30,15 @@ type Verdict = {
 const MEMORY_PREFIX = "mcp__memory__";
 const MAX_EPISODE_BODY = 900;
 const MAX_TRIPLET_FACT = 200;
+
+/** Начало команды или начало сегмента после ; | && */
+const SEGMENT = String.raw`(?:^|[;&|]\s*)`;
+
+/** Инструменты поиска: у нас есть fd и rg, и они быстрее. */
+const SEARCH_TOOLING: Array<[RegExp, string, string]> = [
+	[new RegExp(`${SEGMENT}find\\s`), "use-fd", "используй `fd` вместо `find`"],
+	[new RegExp(`${SEGMENT}grep\\s[^;&|]*-[a-zA-Z]*[rR]`), "use-rg", "используй `rg` вместо `grep -r`"],
+];
 
 function inspectMemory(tool: string, input: Record<string, unknown>): Verdict | undefined {
 	if (tool === "clear_graph") {
@@ -81,6 +91,12 @@ function inspectMemory(tool: string, input: Record<string, unknown>): Verdict | 
 }
 
 function inspect(toolName: string, input: Record<string, unknown>): Verdict | undefined {
+	if (toolName === "bash") {
+		const command = typeof input.command === "string" ? input.command : "";
+		const search = SEARCH_TOOLING.find(([pattern]) => pattern.test(command));
+		if (search) return { mode: "block", rule: search[1], reason: search[2] };
+		return undefined;
+	}
 	if (!toolName.startsWith(MEMORY_PREFIX)) return undefined;
 	return inspectMemory(toolName.slice(MEMORY_PREFIX.length), input);
 }
@@ -140,7 +156,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("guardrails", {
-		description: "Гардрейлы на работу с памятью graphiti: on | off | status",
+		description: "Гардрейлы: find/grep в bash, работа с памятью graphiti: on | off | status",
 		getArgumentCompletions: (prefix: string) => {
 			const items = ["status", "on", "off"]
 				.filter((v) => v.startsWith(prefix.toLowerCase()))
