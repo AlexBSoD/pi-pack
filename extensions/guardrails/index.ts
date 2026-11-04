@@ -4,7 +4,7 @@
  *
  * Правила висят на tool_call, поэтому работают независимо от того, прочитала
  * ли модель CONTEXT.md и в каком она настроении:
- *   - find / grep -r в bash → блок с напоминанием про fd/rg;
+ *   - find / grep в bash → блок с напоминанием про fd/rg;
  *   - episode_body > 900 символов, custom_extraction_instructions в
  *     add_memory, длинный fact в add_triplet, clear_graph → блок;
  *   - delete_episode / delete_entity_edge → диалог подтверждения.
@@ -37,7 +37,7 @@ const SEGMENT = String.raw`(?:^|[;&|]\s*)`;
 /** Инструменты поиска: у нас есть fd и rg, и они быстрее. */
 const SEARCH_TOOLING: Array<[RegExp, string, string]> = [
 	[new RegExp(`${SEGMENT}find\\s`), "use-fd", "используй `fd` вместо `find`"],
-	[new RegExp(`${SEGMENT}grep\\s[^;&|]*-[a-zA-Z]*[rR]`), "use-rg", "используй `rg` вместо `grep -r`"],
+	[new RegExp(`${SEGMENT}grep\\s`), "use-rg", "используй `rg` вместо `grep`"],
 ];
 
 function inspectMemory(tool: string, input: Record<string, unknown>): Verdict | undefined {
